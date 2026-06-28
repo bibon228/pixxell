@@ -82,6 +82,33 @@
             /* Чтобы не мешал кликать */
         }
 
+        /* Адаптация под мобильные экраны (телефоны) */
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 1.5em;
+                top: 10px;
+            }
+            h1 img {
+                height: 35px !important;
+            }
+            #hud {
+                top: 10px;
+                right: 10px;
+                padding: 8px 15px;
+                font-size: 0.9em;
+            }
+            #palette {
+                bottom: 15px;
+                padding: 10px 15px;
+                border-radius: 20px;
+            }
+            .color-btn {
+                width: 35px;
+                height: 35px;
+                margin: 5px;
+            }
+        }
+
         canvas {
             /* Возвращаем классический белый фон холста! */
             background-color: white;
