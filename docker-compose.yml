@@ -1,0 +1,20 @@
+version: '3.8'
+services:
+  # 1. Наш кэш (In-memory БД)
+  redis:
+    image: redis:7-alpine # Используем легкую alpine-версию
+    ports:
+      - "6379:6379" # Пробрасываем порт из контейнера на твой компьютер
+  # 2. Наше постоянное хранилище
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: pixel_user # Логин для базы
+      POSTGRES_PASSWORD: pixel_pass # Пароль для базы
+      POSTGRES_DB: pixel_db # Название самой базы данных
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data # Это нужно, чтобы при перезапуске Докера данные не удалились
+volumes:
+  pgdata: # Объявляем том (volume) для сохранения данных на жестком диске

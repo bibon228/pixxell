@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <title>БЕБЕ</title>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700&display=swap" rel="stylesheet">
+    <style>
+        body,
+        html {
+            background: linear-gradient(135deg, #ffdde1, #ee9ca7);
+            color: #5d4037;
+            font-family: 'Nunito', sans-serif;
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            /* Убираем ползунки навсегда */
+        }
+
+        h1 {
+            /* Заголовок висит сверху экрана, даже при скролле */
+            position: fixed;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 2.5em;
+            text-shadow: 2px 2px 5px rgba(255, 255, 255, 0.8);
+            margin: 0;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        #palette {
+            /* Палитра висит снизу экрана */
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            background: rgba(255, 255, 255, 0.3);
+            backdrop-filter: blur(8px);
+            padding: 15px 25px;
+            border-radius: 40px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .color-btn {
+            width: 45px;
+            height: 45px;
+            border: 3px solid white;
+            border-radius: 50%;
+            cursor: pointer;
+            margin: 0 8px;
+            transition: all 0.2s ease-in-out;
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .color-btn:hover {
+            transform: translateY(-5px) scale(1.15);
+            box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .color-btn:active {
+            transform: scale(0.9);
+        }
+
+        #hud {
+            /* HUD сверху справа */
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.5);
+            backdrop-filter: blur(8px);
+            padding: 12px 25px;
+            border-radius: 25px;
+            font-size: 1.2em;
+            font-weight: bold;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+            z-index: 10;
+            pointer-events: none;
+            /* Чтобы не мешал кликать */
+        }
+
+        canvas {
+            /* Возвращаем классический белый фон холста! */
+            background-color: white;
+            image-rendering: pixelated;
+            cursor: crosshair;
+
+            /* Абсолютное центрирование! Холст будет идеально по центру экрана */
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+
+            width: 2000px;
+            height: 2000px;
+            display: block;
+
+            /* Нежная розовая сетка */
+            background-image:
+                linear-gradient(rgba(238, 156, 167, 0.4) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(238, 156, 167, 0.4) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+    </style>
+
+</head>
+
+<body>
+    <h1>
+        <img src="cat.png" style="height: 60px; vertical-align: middle;">
+        БЕБЕ
+        <img src="cat.png" style="height: 60px; vertical-align: middle; transform: scaleX(-1);">
+    </h1>
+
+    <div id="hud">
+        🎨 <span id="hud-name">Аноним</span>: <span id="hud-score">0</span> шт.
+    </div>
+
+    <div id="palette">
+        <button class="color-btn" style="background-color: #ffb3ba" onclick="myColor = 1" title="Розовый"></button>
+        <button class="color-btn" style="background-color: #ffdfba" onclick="myColor = 2" title="Персиковый"></button>
+        <button class="color-btn" style="background-color: #ffffba" onclick="myColor = 3" title="Лимонный"></button>
+        <button class="color-btn" style="background-color: #baffc9" onclick="myColor = 4" title="Мятный"></button>
+        <button class="color-btn" style="background-color: #bae1ff" onclick="myColor = 5" title="Небесный"></button>
+        <button class="color-btn" style="background-color: #d291bc" onclick="myColor = 6" title="Сиреневый"></button>
+        <button class="color-btn" style="background-color: #ffffff" onclick="myColor = 0" title="Ластик"></button>
+        <button class="color-btn" style="background-color: #5d4037" onclick="myColor = 7" title="Темный"></button>
+    </div>
+
+    <canvas id="board" width="100" height="100"></canvas>
+
+    <script>
+        const canvas = document.getElementById("board");
+        const ctx = canvas.getContext("2d");
+
+        const colors = {
+            0: "#FFFFFF",
+            1: "#ffb3ba", 2: "#ffdfba", 3: "#ffffba",
+            4: "#baffc9", 5: "#bae1ff", 6: "#d291bc",
+            7: "#5d4037"
+        };
+        let myColor = 1;
+        let socket;
+        let username;
+
+        async function connect() {
+            // Проверяем, есть ли у нас сохраненный токен в браузере
+            let token = localStorage.getItem("pixel_token");
+            username = localStorage.getItem("pixel_username");
+
+            if (!token || !username) {
+                // Если мы тут впервые, спрашиваем ник
+                username = prompt("Как вас зовут?");
+                if (!username) username = "anonymous";
+
+                // 1. Получаем токен от сервера (АВТОРИЗАЦИЯ)
+                const response = await fetch("/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ username: username })
+                });
+                const result = await response.json();
+                token = result.token;
+
+                // Сохраняем ник и токен в памяти браузера, чтобы больше не спрашивать!
+                localStorage.setItem("pixel_token", token);
+                localStorage.setItem("pixel_username", username);
+            }
+
+            // Сразу обновляем HUD нашим ником
+            document.getElementById("hud-name").innerText = username;
+
+            // 2. Подключаемся к вебсокету с пропуском
+            socket = new WebSocket("ws://localhost:8080/ws?token=" + token);
+
+            socket.onopen = function (event) {
+                console.log("Соединение установлено!");
+            };
+
+            socket.onmessage = function (event) {
+                const data = JSON.parse(event.data);
+
+                // 1. Если сервер прислал нам весь холст целиком (событие init)
+                if (data.type === "init") {
+                    // Обновляем наш счетчик пикселей при старте
+                    document.getElementById("hud-score").innerText = data.pixelsPlaced || 0;
+
+                    // Пробегаемся по всему массиву (10000 пикселей)
+                    for (let i = 0; i < data.canvas.length; i++) {
+                        const colorCode = data.canvas[i];
+                        if (colorCode > 0) { // Если цвет 0, значит там пустота, не рисуем
+                            // Математика: превращаем индекс (0-9999) обратно в координаты (X,Y)
+                            const x = i % 100;
+                            const y = Math.floor(i / 100);
+
+                            ctx.fillStyle = colors[colorCode] || "#FFFFFF";
+                            ctx.fillRect(x, y, 1, 1);
+                        }
+                    }
+                    return; // Заканчиваем работу функции
+                }
+                // 2. Иначе, это обычный клик от какого-то игрока (Лайв-обновление)
+                if (data.color === 255) {
+                    alert("✨ Магия должна перезарядиться! Подожди 10 секунд.");
+                    return;
+                }
+
+                // Если это наш пиксель успешно поставился, обновляем счетчик!
+                if (data.userID === username && data.pixels !== undefined) {
+                    document.getElementById("hud-score").innerText = data.pixels;
+                }
+
+                // Рисуем один пиксель
+                ctx.fillStyle = colors[data.color] || "#FFFFFF";
+                ctx.fillRect(data.x, data.y, 1, 1);
+            };
+        } // конец функции connect
+
+        // Запускаем подключение!
+        connect();
+
+        canvas.addEventListener("click", function (event) {
+            const rect = canvas.getBoundingClientRect();
+
+            // Умный расчет масштаба: смотрим, какого размера холст на экране
+            const scaleX = 100 / 2000;
+            const scaleY = 100 / 2000;
+
+            const x = Math.floor((event.clientX - rect.left) * scaleX);
+            const y = Math.floor((event.clientY - rect.top) * scaleY);
+
+            // Теперь мы НЕ ОТПРАВЛЯЕМ userID! Сервер и так знает, кто мы, по нашему токену!
+            const data = { x: x, y: y, color: myColor };
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify(data));
+            }
+        });
+    </script>
+</body>
+
+</html>

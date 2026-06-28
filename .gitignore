@@ -1,0 +1,15 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Object files
+*.o
+*.a
+*.lib
+
+# OS
+.DS_Store
+Thumbs.db
