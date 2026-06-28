@@ -3,19 +3,21 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>БЕБЕ</title>
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700&display=swap" rel="stylesheet">
     <style>
         body,
         html {
             background: linear-gradient(135deg, #ffdde1, #ee9ca7);
-            background-attachment: fixed; /* Фиксируем фон при скролле */
-            min-height: 100vh;
             color: #5d4037;
             font-family: 'Nunito', sans-serif;
             margin: 0;
             padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden; /* Запрещаем скролл, чтобы шапка не улетала */
+            touch-action: none; /* Отключаем нативные жесты */
         }
 
         h1 {
@@ -116,9 +118,13 @@
             cursor: crosshair;
 
             display: block;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            /* transform будет меняться скриптом! */
+
             width: 2000px;
             height: 2000px;
-            margin: 50px auto; /* Отступ и центрирование на огромных экранах */
             
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             border-radius: 10px;
@@ -248,28 +254,103 @@
         // Запускаем подключение!
         connect();
 
+        // === ЛОГИКА КАСТОМНОГО ПАНА И ЗУМА ===
+        let scale = window.innerWidth < 600 ? 0.5 : 1; // На телефонах сразу чуть отдаляем
+        let panX = 0;
+        let panY = 0;
+
+        function updateTransform() {
+            canvas.style.transform = `translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) scale(${scale})`;
+        }
+        updateTransform();
+
+        let isDragging = false;
+        let hasDragged = false;
+        let startX, startY;
+
+        // ПК (Мышь)
+        window.addEventListener('mousedown', (e) => {
+            if (e.target.closest('#palette') || e.target.closest('#hud')) return;
+            isDragging = true;
+            hasDragged = false;
+            startX = e.clientX - panX;
+            startY = e.clientY - panY;
+        });
+        window.addEventListener('mouseup', () => { isDragging = false; });
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            hasDragged = true;
+            panX = e.clientX - startX;
+            panY = e.clientY - startY;
+            updateTransform();
+        });
+        window.addEventListener('wheel', (e) => {
+            const zoomDelta = e.deltaY * -0.001;
+            scale = Math.min(Math.max(0.2, scale + zoomDelta), 5);
+            updateTransform();
+        });
+
+        // Мобилки (Тач, два пальца = зум)
+        let initialDistance = 0;
+        let initialScale = 1;
+        window.addEventListener('touchstart', (e) => {
+            if (e.target.closest('#palette') || e.target.closest('#hud')) return;
+            if (e.touches.length === 1) {
+                isDragging = true;
+                hasDragged = false;
+                startX = e.touches[0].clientX - panX;
+                startY = e.touches[0].clientY - panY;
+            } else if (e.touches.length === 2) {
+                initialDistance = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                initialScale = scale;
+            }
+        }, { passive: false });
+        
+        window.addEventListener('touchmove', (e) => {
+            if (e.target.closest('#palette') || e.target.closest('#hud')) return;
+            e.preventDefault(); // Запрещаем браузеру тянуть страницу вниз
+
+            if (e.touches.length === 1 && isDragging) {
+                hasDragged = true;
+                panX = e.touches[0].clientX - startX;
+                panY = e.touches[0].clientY - startY;
+                updateTransform();
+            } else if (e.touches.length === 2 && initialDistance > 0) {
+                const currentDistance = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                scale = initialScale * (currentDistance / initialDistance);
+                scale = Math.min(Math.max(0.1, scale), 5);
+                updateTransform();
+            }
+        }, { passive: false });
+        
+        window.addEventListener('touchend', (e) => {
+            if (e.touches.length < 2) initialDistance = 0;
+            if (e.touches.length === 0) isDragging = false;
+        });
+
+        // Логика клика/касания по холсту (Рисование)
         canvas.addEventListener("click", function (event) {
+            if (hasDragged) return; // Не рисуем пиксель, если мы просто скроллили карту!
+
             const rect = canvas.getBoundingClientRect();
 
-            // Умный расчет масштаба: смотрим, какого размера холст на экране
-            const scaleX = 100 / 2000;
-            const scaleY = 100 / 2000;
+            // rect.width УЖЕ учитывает зум, поэтому координаты считаются ИДЕАЛЬНО!
+            const scaleX = 100 / rect.width;
+            const scaleY = 100 / rect.height;
 
             const x = Math.floor((event.clientX - rect.left) * scaleX);
             const y = Math.floor((event.clientY - rect.top) * scaleY);
 
-            // Теперь мы НЕ ОТПРАВЛЯЕМ userID! Сервер и так знает, кто мы, по нашему токену!
             const data = { x: x, y: y, color: myColor };
             if (socket && socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify(data));
             }
-        });
-
-        // Прокручиваем в центр холста при первой загрузке страницы
-        window.addEventListener("load", () => {
-            const centerX = (2000 - window.innerWidth) / 2;
-            const centerY = (2000 - window.innerHeight) / 2;
-            window.scrollTo(centerX, centerY);
         });
     </script>
 </body>
