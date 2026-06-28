@@ -84,11 +84,12 @@
             /* Чтобы не мешал кликать */
         }
 
-        /* Адаптация под мобильные экраны (телефоны) */
         @media (max-width: 600px) {
             h1 {
                 font-size: 1.5em;
                 top: 10px;
+                left: 10px;
+                transform: none; /* Убираем центрирование, ставим в левый угол! */
             }
             h1 img {
                 height: 35px !important;
@@ -255,7 +256,7 @@
         connect();
 
         // === ЛОГИКА КАСТОМНОГО ПАНА И ЗУМА ===
-        let scale = window.innerWidth < 600 ? 0.5 : 1; // На телефонах сразу чуть отдаляем
+        let scale = window.innerWidth < 600 ? 0.5 : 1; 
         let panX = 0;
         let panY = 0;
 
@@ -263,6 +264,21 @@
             canvas.style.transform = `translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) scale(${scale})`;
         }
         updateTransform();
+
+        // Умный зум в точку (фокус), чтобы холст не "убегал" при приближении
+        function doZoom(newScale, focalX, focalY) {
+            newScale = Math.min(Math.max(0.1, newScale), 5);
+            const factor = newScale / scale;
+            
+            const dx = focalX - window.innerWidth / 2;
+            const dy = focalY - window.innerHeight / 2;
+
+            panX = panX * factor + dx * (1 - factor);
+            panY = panY * factor + dy * (1 - factor);
+            
+            scale = newScale;
+            updateTransform();
+        }
 
         let isDragging = false;
         let hasDragged = false;
@@ -286,13 +302,11 @@
         });
         window.addEventListener('wheel', (e) => {
             const zoomDelta = e.deltaY * -0.001;
-            scale = Math.min(Math.max(0.2, scale + zoomDelta), 5);
-            updateTransform();
+            doZoom(scale + zoomDelta, e.clientX, e.clientY);
         });
 
         // Мобилки (Тач, два пальца = зум)
-        let initialDistance = 0;
-        let initialScale = 1;
+        let previousPinchDistance = 0;
         window.addEventListener('touchstart', (e) => {
             if (e.target.closest('#palette') || e.target.closest('#hud')) return;
             if (e.touches.length === 1) {
@@ -301,11 +315,10 @@
                 startX = e.touches[0].clientX - panX;
                 startY = e.touches[0].clientY - panY;
             } else if (e.touches.length === 2) {
-                initialDistance = Math.hypot(
+                previousPinchDistance = Math.hypot(
                     e.touches[0].clientX - e.touches[1].clientX,
                     e.touches[0].clientY - e.touches[1].clientY
                 );
-                initialScale = scale;
             }
         }, { passive: false });
         
@@ -318,20 +331,34 @@
                 panX = e.touches[0].clientX - startX;
                 panY = e.touches[0].clientY - startY;
                 updateTransform();
-            } else if (e.touches.length === 2 && initialDistance > 0) {
+            } else if (e.touches.length === 2 && previousPinchDistance > 0) {
                 const currentDistance = Math.hypot(
                     e.touches[0].clientX - e.touches[1].clientX,
                     e.touches[0].clientY - e.touches[1].clientY
                 );
-                scale = initialScale * (currentDistance / initialDistance);
-                scale = Math.min(Math.max(0.1, scale), 5);
-                updateTransform();
+                
+                const focalX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                const focalY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+
+                const factor = currentDistance / previousPinchDistance;
+                doZoom(scale * factor, focalX, focalY);
+                
+                previousPinchDistance = currentDistance;
             }
         }, { passive: false });
         
         window.addEventListener('touchend', (e) => {
-            if (e.touches.length < 2) initialDistance = 0;
-            if (e.touches.length === 0) isDragging = false;
+            if (e.touches.length < 2) {
+                previousPinchDistance = 0;
+            }
+            if (e.touches.length === 1) {
+                // ПРЕДОТВРАЩАЕМ РЫВОК: если один палец отпустили, второй становится новой точкой старта
+                startX = e.touches[0].clientX - panX;
+                startY = e.touches[0].clientY - panY;
+            }
+            if (e.touches.length === 0) {
+                isDragging = false;
+            }
         });
 
         // Логика клика/касания по холсту (Рисование)
