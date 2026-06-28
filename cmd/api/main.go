@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -237,14 +238,30 @@ func restoreCanvasFromDB() {
 }
 
 func main() {
-	rdb = redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		Password: "",
-		DB:       0,
-	})
+	// 1. Настраиваем Redis через переменные окружения
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL != "" {
+		opt, err := redis.ParseURL(redisURL)
+		if err != nil {
+			log.Fatal("Ошибка парсинга REDIS_URL:", err)
+		}
+		rdb = redis.NewClient(opt)
+	} else {
+		// Локальный дефолт
+		rdb = redis.NewClient(&redis.Options{
+			Addr:     "localhost:6379",
+			Password: "",
+			DB:       0,
+		})
+	}
+
+	// 2. Настраиваем Postgres через переменные окружения (обычно DATABASE_URL)
+	connStr := os.Getenv("DATABASE_URL")
+	if connStr == "" {
+		connStr = "postgres://pixel_user:pixel_pass@127.0.0.1:5433/pixel_db?sslmode=disable"
+	}
 
 	var err error
-	connStr := "postgres://pixel_user:pixel_pass@127.0.0.1:5433/pixel_db?sslmode=disable"
 	pgdb, err = sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatal("Ошибка подключения к Postgres:", err)
@@ -275,8 +292,14 @@ func main() {
 	// Регистрируем наш новый роут для вебсокетов
 	http.HandleFunc("/ws", wsHandler)
 
-	fmt.Println("🚀 Сервер запущен на http://localhost:8080")
-	err = http.ListenAndServe(":8080", nil)
+	// 3. Порт тоже берем из окружения (Railway требует этого!)
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	fmt.Printf("🚀 Сервер запущен на порту %s\n", port)
+	err = http.ListenAndServe(":"+port, nil)
 	if err != nil {
 		log.Fatal("Ошибка запуска сервера:", err)
 	}

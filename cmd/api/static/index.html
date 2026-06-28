@@ -171,11 +171,12 @@
                 localStorage.setItem("pixel_username", username);
             }
 
-            // Сразу обновляем HUD нашим ником
+            // Обновляем HUD нашим ником
             document.getElementById("hud-name").innerText = username;
 
-            // 2. Подключаемся к вебсокету с пропуском
-            socket = new WebSocket("ws://localhost:8080/ws?token=" + token);
+            // 2. Подключаемся к вебсокету с пропуском (и поддерживаем HTTPS/WSS для Railway)
+            const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
+            socket = new WebSocket(protocol + window.location.host + "/ws?token=" + token);
 
             socket.onopen = function (event) {
                 console.log("Соединение установлено!");
