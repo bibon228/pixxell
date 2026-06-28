@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -16,6 +18,9 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/redis/go-redis/v9"
 )
+
+//go:embed static/*
+var staticFiles embed.FS
 
 // Upgrader "прокачивает" обычное HTTP-соединение до постоянного WebSocket-кабеля
 var upgrader = websocket.Upgrader{
@@ -284,8 +289,12 @@ func main() {
 
 	go backupWorker()
 
-	fs := http.FileServer(http.Dir("./static"))
-	http.Handle("/", fs)
+	// Раздаем статические файлы (встроенные прямо в бинарник!)
+	staticFS, err := fs.Sub(staticFiles, "static")
+	if err != nil {
+		log.Fatal(err)
+	}
+	http.Handle("/", http.FileServer(http.FS(staticFS)))
 
 	// Регистрируем роут логина
 	http.HandleFunc("/login", loginHandler)
